@@ -1,6 +1,7 @@
 from csv import reader
 from datetime import datetime
 from domain.accelerometer import Accelerometer
+from domain.parking import Parking
 from domain.gps import Gps
 from domain.aggregated_data import AggregatedData
 import config
@@ -11,6 +12,7 @@ class FileDatasource:
         self,
         accelerometer_filename: str,
         gps_filename: str,
+        parking_filename: str,
     ) -> None:
         pass
 
@@ -20,7 +22,7 @@ class FileDatasource:
             Accelerometer(1, 2, 3),
             Gps(4, 5),
             datetime.now(),
-            config.USER_ID,
+            Parking(3, Gps(5,4))
         )
 
     def startReading(self, *args, **kwargs):
