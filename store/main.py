@@ -11,6 +11,8 @@ from sqlalchemy import (
     String,
     Float,
     DateTime,
+    delete,
+    update,
 )
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import select
@@ -126,9 +128,16 @@ async def send_data_to_subscribers(user_id: int, data):
 
 @app.post("/processed_agent_data/")
 async def create_processed_agent_data(data: List[ProcessedAgentData]):
-    # Insert data to database
-    # Send data to subscribers
-    pass
+
+    with SessionLocal() as database:
+        for item in data:
+            query = (processed_agent_data.insert()
+                     .values(
+                         map_to_json(item)
+                        ))
+            execute_query(query, database)
+
+    await send_data_to_subscribers(data[0].agent_data.user_id, data)
 
 
 @app.get(
@@ -136,33 +145,107 @@ async def create_processed_agent_data(data: List[ProcessedAgentData]):
     response_model=ProcessedAgentDataInDB,
 )
 def read_processed_agent_data(processed_agent_data_id: int):
-    # Get data by id
-    pass
+
+    with SessionLocal() as database:
+
+        data = get_data_by_id(processed_agent_data_id, database)
+        check_data(data)
+
+        return ProcessedAgentDataInDB(**data._asdict())
 
 
 @app.get("/processed_agent_data/", response_model=list[ProcessedAgentDataInDB])
 def list_processed_agent_data():
-    # Get list of data
-    pass
 
+    with SessionLocal() as database:
+
+        query = select(processed_agent_data)
+        all_data = database.execute(query).fetchall()
+
+        check_data(all_data)
+
+        return [ProcessedAgentDataInDB(**data._asdict()) for data in all_data]
 
 @app.put(
     "/processed_agent_data/{processed_agent_data_id}",
     response_model=ProcessedAgentDataInDB,
 )
 def update_processed_agent_data(processed_agent_data_id: int, data: ProcessedAgentData):
-    # Update data
-    pass
+    with SessionLocal() as database:
 
+        existing_data = get_data_by_id(processed_agent_data_id, database)
+        check_data(existing_data)
+
+        query = (update(processed_agent_data)
+                 .where(
+                        processed_agent_data.c.id == processed_agent_data_id
+                     )
+                 .values(
+                        map_to_json(data)
+                     ))
+        execute_query(query, database)
+
+        record = get_data_by_id(processed_agent_data_id, database)
+        check_data(record)
+
+        return ProcessedAgentDataInDB(**record._asdict())
 
 @app.delete(
     "/processed_agent_data/{processed_agent_data_id}",
     response_model=ProcessedAgentDataInDB,
 )
 def delete_processed_agent_data(processed_agent_data_id: int):
-    # Delete by id
-    pass
+    with SessionLocal() as db:
 
+        existing_data = get_data_by_id(processed_agent_data_id, db)
+        check_data(existing_data)
+
+        query = (delete(processed_agent_data)
+                 .where(
+                     processed_agent_data.c.id == processed_agent_data_id
+                    ))
+        execute_query(query, db)
+
+        return ProcessedAgentDataInDB(**existing_data._asdict())
+
+# HELPERS
+
+
+def map_to_json(data):
+    values = {}
+    
+    values["road_state"] = data.road_state
+    values["user_id"] = data.agent_data.user_id
+    values["timestamp"] = data.agent_data.timestamp.isoformat()
+    
+    # Accelerometer data
+    values["x"] = data.agent_data.accelerometer.x
+    values["y"] = data.agent_data.accelerometer.y
+    values["z"] = data.agent_data.accelerometer.z
+    
+    # GPS data
+    values["latitude"] = data.agent_data.gps.latitude
+    values["longitude"] = data.agent_data.gps.longitude
+
+    return values
+
+def get_data_by_id(id, database):
+
+    id = int(id)
+
+    query = (select(processed_agent_data).where(
+        processed_agent_data.c.id == id
+        ))
+    data = database.execute(query).fetchone()
+    return data
+
+def check_data(data):
+    if data is None:
+        raise HTTPException(status_code=404, detail="Not Found")
+    
+def execute_query(query, database):
+    database.execute(query)
+    database.commit()
 
 if __name__ == "__main__":
     import uvicorn
