@@ -22,3 +22,10 @@ class StoreApiAdapter(StoreGateway):
             bool: True if the data is successfully saved, False otherwise.
         """
         # Implement it
+
+        URL = self.api_base_url + "/processed_agent_data/"
+        JSON = [json.loads(item.json()) for item in processed_agent_data_batch]
+
+        result = requests.post(URL,  json=JSON)
+        
+        return 200 <= result.status_code < 300
